@@ -2,22 +2,26 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>World Time Board</title>
+  <title>Live Time Presence Board</title>
 
-  <!-- OPTIONAL: external CSS (recommended for GitHub) -->
   <link rel="stylesheet" href="style.css">
 </head>
 
 <body>
 
-<h2>World Time Board</h2>
+<h1 class="title">Live Presence Time Board</h1>
+<p class="subtitle">Join your timezone and see everyone in real time</p>
 
-<input id="name" placeholder="Your name">
-<select id="timezone"></select>
-<button id="joinBtn">Join</button>
+<div class="join-box">
+  <input id="name" placeholder="Your name">
+  <select id="timezone"></select>
+  <button id="joinBtn">Join</button>
+</div>
 
 <div id="error"></div>
 <div id="users"></div>
+
+<div class="watermark">@Matthew Thonhauser</div>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
@@ -26,11 +30,11 @@ import {
   collection,
   addDoc,
   onSnapshot,
-  doc,
-  deleteDoc
+  deleteDoc,
+  doc
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
-/* FIREBASE CONFIG */
+/* CONFIG */
 const firebaseConfig = {
   apiKey: "AIzaSyDeh9LfFywf67k3rMUjFZnsslOme6T5m_4",
   authDomain: "web-app-clock-fidget.firebaseapp.com",
@@ -43,7 +47,6 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-/* ERROR DISPLAY */
 const errorBox = document.getElementById("error");
 function error(msg) {
   errorBox.textContent = msg;
@@ -58,34 +61,20 @@ Intl.supportedValuesOf("timeZone").forEach(tz => {
   tzSelect.appendChild(opt);
 });
 
-/* JOIN */
-document.getElementById("joinBtn").onclick = async () => {
-  const name = document.getElementById("name").value;
+/* STORE FOR DUPLICATE CHECK */
+let existingNames = new Set();
 
-  if (!name) return error("Enter a name");
-
-  try {
-    await addDoc(collection(db, "users"), {
-      name,
-      timezone: tzSelect.value,
-      createdAt: Date.now()
-    });
-
-    error("");
-    document.getElementById("name").value = "";
-  } catch (e) {
-    error("Write failed: " + e.message);
-  }
-};
-
-/* LIVE USERS */
+/* LIVE SNAPSHOT (also tracks names) */
 const container = document.getElementById("users");
 
 onSnapshot(collection(db, "users"), snapshot => {
   container.innerHTML = "";
+  existingNames.clear();
 
   snapshot.forEach(docSnap => {
     const data = docSnap.data();
+
+    existingNames.add(data.name?.toLowerCase());
 
     const div = document.createElement("div");
     div.className = "user";
@@ -100,11 +89,7 @@ onSnapshot(collection(db, "users"), snapshot => {
     btn.textContent = "Leave";
 
     btn.onclick = async () => {
-      try {
-        await deleteDoc(doc(db, "users", docSnap.id));
-      } catch (e) {
-        error("Delete failed: " + e.message);
-      }
+      await deleteDoc(doc(db, "users", docSnap.id));
     };
 
     div.appendChild(nameEl);
@@ -112,23 +97,44 @@ onSnapshot(collection(db, "users"), snapshot => {
     div.appendChild(btn);
     container.appendChild(div);
 
-    function updateTime() {
-      try {
-        timeEl.textContent = new Date().toLocaleTimeString("en-GB", {
-          timeZone: data.timezone,
-          hour: "2-digit",
-          minute: "2-digit",
-          second: "2-digit"
-        });
-      } catch {
-        timeEl.textContent = "Time error";
-      }
+    function tick() {
+      timeEl.textContent = new Date().toLocaleTimeString("en-GB", {
+        timeZone: data.timezone,
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit"
+      });
     }
 
-    updateTime();
-    setInterval(updateTime, 1000);
+    tick();
+    setInterval(tick, 1000);
   });
 });
+
+/* JOIN WITH DUPLICATE PREVENTION */
+document.getElementById("joinBtn").onclick = async () => {
+  const name = document.getElementById("name").value.trim();
+  const timezone = tzSelect.value;
+
+  if (!name) return error("Enter a name");
+
+  if (existingNames.has(name.toLowerCase())) {
+    return error("Name already exists. Choose another.");
+  }
+
+  try {
+    await addDoc(collection(db, "users"), {
+      name,
+      timezone,
+      createdAt: Date.now()
+    });
+
+    error("");
+    document.getElementById("name").value = "";
+  } catch (e) {
+    error("Write failed: " + e.message);
+  }
+};
 </script>
 
 </body>
