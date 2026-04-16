@@ -3,137 +3,204 @@
 <head>
   <meta charset="UTF-8">
   <title>World Time Board</title>
+
   <style>
     body {
       font-family: Arial;
       background: #111;
       color: white;
       text-align: center;
+      padding: 20px;
     }
+
     input, select, button {
       margin: 5px;
       padding: 8px;
       font-size: 14px;
+      border-radius: 6px;
+      border: 1px solid #333;
+      background: #1a1a1a;
+      color: white;
     }
+
+    button {
+      cursor: pointer;
+    }
+
     .user {
       margin: 10px;
-      padding: 10px;
+      padding: 12px;
       border: 1px solid #444;
-      border-radius: 8px;
+      border-radius: 10px;
       display: inline-block;
-      min-width: 150px;
+      min-width: 180px;
+      background: #1a1a1a;
     }
+
     .time {
       font-size: 20px;
       font-weight: bold;
+      margin-top: 5px;
+    }
+
+    #error {
+      color: #ff4d4d;
+      margin-top: 10px;
+      white-space: pre-wrap;
     }
   </style>
 </head>
+
 <body>
 
 <h2>World Time Board</h2>
 
 <input id="name" placeholder="Your name">
 <select id="timezone"></select>
-<button onclick="addUser()">Join</button>
+<button id="joinBtn">Join</button>
 
+<div id="error"></div>
 <div id="users"></div>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import {
-  getFirestore, collection, addDoc,
-  onSnapshot, updateDoc, doc
+  getFirestore,
+  collection,
+  addDoc,
+  onSnapshot,
+  updateDoc,
+  doc
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
-/* === PASTE YOUR FIREBASE CONFIG HERE === */
-  const firebaseConfig = {
-    apiKey: "AIzaSyDEh9LfFywf67k3rMUjFZnsslOme6T5m_4",
-    authDomain: "web-app-clock-fidget.firebaseapp.com",
-    projectId: "web-app-clock-fidget",
-    storageBucket: "web-app-clock-fidget.firebasestorage.app",
-    messagingSenderId: "468848014550",
-    appId: "1:468848014550:web:b2be733bd517f3a5c8c577",
-    measurementId: "G-2FDSHWH73F"
-  };
+const errorBox = document.getElementById("error");
 
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+function showError(msg) {
+  errorBox.textContent = msg;
+  console.error(msg);
+}
 
-/* === TIMEZONE LIST === */
+/* FIREBASE CONFIG */
+const firebaseConfig = {
+  apiKey: "AIzaSyDeh9LfFywf67k3rMUjFZnsslOme6T5m_4",
+  authDomain: "web-app-clock-fidget.firebaseapp.com",
+  projectId: "web-app-clock-fidget",
+  storageBucket: "web-app-clock-fidget.firebasestorage.app",
+  messagingSenderId: "468848014550",
+  appId: "1:468848014550:web:b2be733bd517f3a5c8c577"
+};
+
+let app, db;
+
+try {
+  app = initializeApp(firebaseConfig);
+  db = getFirestore(app);
+} catch (e) {
+  showError("Firebase init failed:\n" + e.message);
+}
+
+/* TIMEZONES */
 const tzSelect = document.getElementById("timezone");
-Intl.supportedValuesOf('timeZone').forEach(tz => {
-  let opt = document.createElement("option");
-  opt.value = tz;
-  opt.textContent = tz;
-  tzSelect.appendChild(opt);
-});
+try {
+  Intl.supportedValuesOf('timeZone').forEach(tz => {
+    const opt = document.createElement("option");
+    opt.value = tz;
+    opt.textContent = tz;
+    tzSelect.appendChild(opt);
+  });
+} catch (e) {
+  showError("Timezone load failed");
+}
 
-/* === ADD USER === */
-async function addUser() {
+/* JOIN BUTTON */
+document.getElementById("joinBtn").onclick = async () => {
   const name = document.getElementById("name").value;
   const timezone = tzSelect.value;
 
-  if (!name) return alert("Enter name");
+  if (!name) {
+    showError("Enter a name first");
+    return;
+  }
 
-  await addDoc(collection(db, "users"), {
-    name,
-    timezone,
-    active: true
-  });
+  if (!db) {
+    showError("Database not initialized");
+    return;
+  }
 
-  document.getElementById("name").value = "";
-}
+  try {
+    await addDoc(collection(db, "users"), {
+      name,
+      timezone,
+      active: true,
+      createdAt: Date.now()
+    });
 
-window.addUser = addUser;
+    document.getElementById("name").value = "";
+    errorBox.textContent = "";
+  } catch (e) {
+    showError("Write failed:\n" + e.message);
+  }
+};
 
-/* === LIVE RENDER === */
+/* LIVE DATA */
 const container = document.getElementById("users");
 
-onSnapshot(collection(db, "users"), snapshot => {
-  container.innerHTML = "";
+try {
+  onSnapshot(collection(db, "users"), snapshot => {
+    container.innerHTML = "";
 
-  snapshot.forEach(docSnap => {
-    const data = docSnap.data();
-    if (!data.active) return;
+    snapshot.forEach(docSnap => {
+      const data = docSnap.data();
 
-    const div = document.createElement("div");
-    div.className = "user";
+      const div = document.createElement("div");
+      div.className = "user";
 
-    const timeEl = document.createElement("div");
-    timeEl.className = "time";
+      const nameEl = document.createElement("div");
+      nameEl.textContent = data.name || "No name";
 
-    const nameEl = document.createElement("div");
-    nameEl.textContent = data.name;
+      const timeEl = document.createElement("div");
+      timeEl.className = "time";
 
-    const toggle = document.createElement("button");
-    toggle.textContent = "Leave";
-    toggle.onclick = async () => {
-      await updateDoc(doc(db, "users", docSnap.id), {
-        active: false
-      });
-    };
+      const btn = document.createElement("button");
+      btn.textContent = "Leave";
 
-    div.appendChild(nameEl);
-    div.appendChild(timeEl);
-    div.appendChild(toggle);
-    container.appendChild(div);
+      btn.onclick = async () => {
+        try {
+          await updateDoc(doc(db, "users", docSnap.id), {
+            active: false
+          });
+        } catch (e) {
+          showError("Update failed:\n" + e.message);
+        }
+      };
 
-    /* LIVE CLOCK */
-    function updateTime() {
-      const now = new Date();
-      timeEl.textContent = now.toLocaleTimeString("en-GB", {
-        timeZone: data.timezone,
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit"
-      });
-    }
+      div.appendChild(nameEl);
+      div.appendChild(timeEl);
+      div.appendChild(btn);
+      container.appendChild(div);
 
-    updateTime();
-    setInterval(updateTime, 1000);
+      function updateTime() {
+        try {
+          const now = new Date();
+          timeEl.textContent = now.toLocaleTimeString("en-GB", {
+            timeZone: data.timezone,
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit"
+          });
+        } catch {
+          timeEl.textContent = "Time error";
+        }
+      }
+
+      updateTime();
+      setInterval(updateTime, 1000);
+    });
   });
-});
+} catch (e) {
+  showError("Snapshot failed:\n" + e.message);
+}
+
 </script>
 
 </body>
