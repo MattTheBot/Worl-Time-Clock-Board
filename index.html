@@ -4,63 +4,8 @@
   <meta charset="UTF-8">
   <title>World Time Board</title>
 
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      background: #111;
-      color: #fff;
-      text-align: center;
-      padding: 20px;
-    }
-
-    input, select, button {
-      margin: 6px;
-      padding: 10px;
-      font-size: 14px;
-      border-radius: 6px;
-      border: 1px solid #333;
-      background: #1a1a1a;
-      color: white;
-    }
-
-    button {
-      cursor: pointer;
-      background: #2d6cdf;
-      border: none;
-    }
-
-    button:hover {
-      background: #1f4fb0;
-    }
-
-    .user {
-      margin: 10px;
-      padding: 12px;
-      border: 1px solid #444;
-      border-radius: 10px;
-      display: inline-block;
-      min-width: 180px;
-      background: #1a1a1a;
-    }
-
-    .time {
-      font-size: 20px;
-      font-weight: bold;
-      margin-top: 5px;
-    }
-
-    #error {
-      margin-top: 10px;
-      color: #ff4d4d;
-      white-space: pre-wrap;
-    }
-
-    #status {
-      margin-top: 5px;
-      color: #888;
-      font-size: 12px;
-    }
-  </style>
+  <!-- OPTIONAL: external CSS (recommended for GitHub) -->
+  <link rel="stylesheet" href="style.css">
 </head>
 
 <body>
@@ -71,31 +16,21 @@
 <select id="timezone"></select>
 <button id="joinBtn">Join</button>
 
-<div id="status">Loading...</div>
 <div id="error"></div>
 <div id="users"></div>
 
 <script type="module">
-const status = document.getElementById("status");
-const errorBox = document.getElementById("error");
-
-function error(msg) {
-  errorBox.textContent = msg;
-  console.error(msg);
-}
-
-/* FIREBASE IMPORTS */
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import {
   getFirestore,
   collection,
   addDoc,
   onSnapshot,
-  updateDoc,
-  doc
+  doc,
+  deleteDoc
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
-/* CONFIG */
+/* FIREBASE CONFIG */
 const firebaseConfig = {
   apiKey: "AIzaSyDeh9LfFywf67k3rMUjFZnsslOme6T5m_4",
   authDomain: "web-app-clock-fidget.firebaseapp.com",
@@ -105,39 +40,29 @@ const firebaseConfig = {
   appId: "1:468848014550:web:b2be733bd517f3a5c8c577"
 };
 
-/* INIT */
-let app, db;
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
 
-try {
-  app = initializeApp(firebaseConfig);
-  db = getFirestore(app);
-  status.textContent = "Firebase loaded";
-} catch (e) {
-  error("Firebase init failed: " + e.message);
+/* ERROR DISPLAY */
+const errorBox = document.getElementById("error");
+function error(msg) {
+  errorBox.textContent = msg;
 }
 
 /* TIMEZONES */
 const tzSelect = document.getElementById("timezone");
-
-try {
-  Intl.supportedValuesOf("timeZone").forEach(tz => {
-    const opt = document.createElement("option");
-    opt.value = tz;
-    opt.textContent = tz;
-    tzSelect.appendChild(opt);
-  });
-} catch (e) {
-  error("Timezone load failed");
-}
+Intl.supportedValuesOf("timeZone").forEach(tz => {
+  const opt = document.createElement("option");
+  opt.value = tz;
+  opt.textContent = tz;
+  tzSelect.appendChild(opt);
+});
 
 /* JOIN */
 document.getElementById("joinBtn").onclick = async () => {
   const name = document.getElementById("name").value;
 
-  if (!name) {
-    error("Enter a name");
-    return;
-  }
+  if (!name) return error("Enter a name");
 
   try {
     await addDoc(collection(db, "users"), {
@@ -146,70 +71,64 @@ document.getElementById("joinBtn").onclick = async () => {
       createdAt: Date.now()
     });
 
-    errorBox.textContent = "";
+    error("");
+    document.getElementById("name").value = "";
   } catch (e) {
     error("Write failed: " + e.message);
   }
 };
 
-/* LIVE DATA */
+/* LIVE USERS */
 const container = document.getElementById("users");
 
-try {
-  onSnapshot(collection(db, "users"), snapshot => {
-    container.innerHTML = "";
+onSnapshot(collection(db, "users"), snapshot => {
+  container.innerHTML = "";
 
-    snapshot.forEach(docSnap => {
-      const data = docSnap.data();
+  snapshot.forEach(docSnap => {
+    const data = docSnap.data();
 
-      const div = document.createElement("div");
-      div.className = "user";
+    const div = document.createElement("div");
+    div.className = "user";
 
-      const nameEl = document.createElement("div");
-      nameEl.textContent = data.name;
+    const nameEl = document.createElement("div");
+    nameEl.textContent = data.name;
 
-      const timeEl = document.createElement("div");
-      timeEl.className = "time";
+    const timeEl = document.createElement("div");
+    timeEl.className = "time";
 
-      const btn = document.createElement("button");
-      btn.textContent = "Leave";
+    const btn = document.createElement("button");
+    btn.textContent = "Leave";
 
-      btn.onclick = async () => {
-        try {
-          await updateDoc(doc(db, "users", docSnap.id), {
-            left: true
-          });
-        } catch (e) {
-          error("Update failed: " + e.message);
-        }
-      };
-
-      div.appendChild(nameEl);
-      div.appendChild(timeEl);
-      div.appendChild(btn);
-      container.appendChild(div);
-
-      function tick() {
-        try {
-          timeEl.textContent = new Date().toLocaleTimeString("en-GB", {
-            timeZone: data.timezone,
-            hour: "2-digit",
-            minute: "2-digit",
-            second: "2-digit"
-          });
-        } catch {
-          timeEl.textContent = "Time error";
-        }
+    btn.onclick = async () => {
+      try {
+        await deleteDoc(doc(db, "users", docSnap.id));
+      } catch (e) {
+        error("Delete failed: " + e.message);
       }
+    };
 
-      tick();
-      setInterval(tick, 1000);
-    });
+    div.appendChild(nameEl);
+    div.appendChild(timeEl);
+    div.appendChild(btn);
+    container.appendChild(div);
 
+    function updateTime() {
+      try {
+        timeEl.textContent = new Date().toLocaleTimeString("en-GB", {
+          timeZone: data.timezone,
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit"
+        });
+      } catch {
+        timeEl.textContent = "Time error";
+      }
+    }
+
+    updateTime();
+    setInterval(updateTime, 1000);
   });
-} catch (e) {
-  error("Snapshot failed: " + e.message);
-}
+});
 </script>
 
 </body>
